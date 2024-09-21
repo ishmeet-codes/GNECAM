@@ -151,13 +151,18 @@
 
           // Fetch place name from OpenCage API
           const placeName = await getPlaceName(latitude, longitude);
-          
+
+          // Add black background behind text
+          context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          context.fillRect(0, canvas.height - 120, canvas.width, 120);
+
+          // Add text for location, place name, and timestamp
           context.font = '20px Arial';
           context.fillStyle = 'white';
-          context.fillText(`Lat: ${latitude}`, 10, canvas.height - 100);
-          context.fillText(`Long: ${longitude}`, 10, canvas.height - 80);
-          context.fillText(`Place: ${placeName}`, 10, canvas.height - 60);
-          context.fillText(`Time: ${formattedTime}`, 10, canvas.height - 40);
+          context.fillText(`Lat: ${latitude}`, 10, canvas.height - 90);
+          context.fillText(`Long: ${longitude}`, 10, canvas.height - 70);
+          context.fillText(`Place: ${placeName}`, 10, canvas.height - 50);
+          context.fillText(`Time: ${formattedTime}`, 10, canvas.height - 30);
 
           const imageDataUrl = canvas.toDataURL('image/png');
           saveImage(imageDataUrl, currentTime);
