@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Camera App with Geotag</title>
+  <style>
+    #canvas {
+      display: none;
+    }
+    video {
+      display: block;
+      width: 300px;
+    }
+    img {
+      margin-top: 20px;
+      width: 300px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Camera App with Geotag</h1>
+  <video id="video" autoplay></video>
+  <button id="snap">Take Picture</button>
+  <canvas id="canvas"></canvas>
+  <img id="photo" alt="The photo will appear here">
+  <button id="download" style="display:none;">Download Image</button>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const photo = document.getElementById('photo');
+    const snap = document.getElementById('snap');
+    const downloadBtn = document.getElementById('download');
+
+    const API_KEY = 'cbd0371c8a014a2db556e49a900552cd'; // Your OpenCage API key
+
+    // Get camera video stream
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        video.srcObject = stream;
+      })
+      .catch(err => {
+        console.error("Error accessing camera: ", err);
+      });
+
+    snap.addEventListener('click', () => {
+      // Draw video frame to canvas
+      const context = canvas.getContext('2d');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // Get Geolocation
+      navigator.geolocation.getCurrentPosition(async position => {
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+
+        const timestamp = new Date();
+        const time = `${timestamp.getHours()}:${timestamp.getMinutes()}:${timestamp.getSeconds()} ${timestamp.getDate()}/${timestamp.getMonth() + 1}/${timestamp.getFullYear()}`;
+
+        // Fetch place name using OpenCage Geocoding API
+        const placeName = await getPlaceName(latitude, longitude);
+
+        // Add geotag to the image (draw on canvas)
+        context.font = "20px Arial";
+        context.fillStyle = "white";
+        context.fillText(`Lat: ${latitude}`, 10, canvas.height - 80);
+        context.fillText(`Lon: ${longitude}`, 10, canvas.height - 60);
+        context.fillText(`Place: ${placeName}`, 10, canvas.height - 40);
+        context.fillText(`Time: ${time}`, 10, canvas.height - 20);
+
+        // Show the image on the page
+        const dataUrl = canvas.toDataURL('image/png');
+        photo.src = dataUrl;
+        downloadBtn.style.display = 'block';
+        downloadBtn.href = dataUrl;
+        downloadBtn.download = `geotagged_image_${timestamp.getTime()}.png`;
+      });
+    });
+
+    // Reverse Geocoding function using OpenCage API
+    async function getPlaceName(lat, lon) {
+      const url = `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lon}&key=${API_KEY}`;
+      const response = await fetch(url);
+      const data = await response.json();
+      return data.results[0].formatted || "Unknown Location";
+    }
+  </script>
+</body>
+</html>
