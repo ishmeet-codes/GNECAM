@@ -3,89 +3,232 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Camera App with Geotag</title>
+  <title>Camera App with Timestamped Image Filenames</title>
   <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      background-color: #000;
+      height: 100vh;
+      color: white;
+    }
+
+    video, canvas {
+      display: block;
+      width: 100%;
+      max-width: 640px;
+      height: auto;
+      border-radius: 12px;
+      margin-bottom: 10px;
+    }
+
+    button {
+      background-color: #fff;
+      border: none;
+      color: black;
+      padding: 10px 20px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 5px;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    #overlay {
+      position: absolute;
+      bottom: 20px;
+      left: 10px;
+      right: 10px;
+      padding: 10px;
+      background-color: rgba(0, 0, 0, 0.7); /* 70% opacity */
+      color: white;
+      font-size: 18px;
+      text-align: left;
+      border-radius: 10px;
+    }
+
+    #capture {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #ff3333;
+      color: white;
+      border-radius: 50%;
+      width: 70px;
+      height: 70px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #switch-camera {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background-color: #333;
+      color: white;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    #toggle-recording {
+      display: block;
+      background-color: #333;
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 5px;
+    }
+
     #canvas {
       display: none;
-    }
-    video {
-      display: block;
-      width: 300px;
-    }
-    img {
-      margin-top: 20px;
-      width: 300px;
     }
   </style>
 </head>
 <body>
-  <h1>Camera App with Geotag</h1>
   <video id="video" autoplay></video>
-  <button id="snap">Take Picture</button>
-  <canvas id="canvas"></canvas>
-  <img id="photo" alt="The photo will appear here">
-  <button id="download" style="display:none;">Download Image</button>
+  <canvas id="canvas" width="640" height="480"></canvas>
+  <div id="overlay"></div>
+
+  <button id="capture">📸</button>
+  <button id="toggle-recording">Start Recording 🎥</button>
+  <div id="switch-camera">🔄</div>
 
   <script>
+    let currentStream = null;
+    let currentDeviceId = null;
+    let mediaRecorder;
+    let recordedChunks = [];
+    let isRecording = false; 
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
-    const photo = document.getElementById('photo');
-    const snap = document.getElementById('snap');
-    const downloadBtn = document.getElementById('download');
+    const context = canvas.getContext('2d');
+    const captureButton = document.getElementById('capture');
+    const switchCameraButton = document.getElementById('switch-camera');
+    const toggleRecordingButton = document.getElementById('toggle-recording');
+    const overlay = document.getElementById('overlay');
 
-    const API_KEY = 'cbd0371c8a014a2db556e49a900552cd'; // Your OpenCage API key
+    // Get access to the user's camera
+    async function startCamera(deviceId = null) {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
 
-    // Get camera video stream
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then(stream => {
-        video.srcObject = stream;
-      })
-      .catch(err => {
-        console.error("Error accessing camera: ", err);
-      });
+      const constraints = {
+        video: {
+          deviceId: deviceId ? { exact: deviceId } : undefined,
+        },
+        audio: true,
+      };
 
-    snap.addEventListener('click', () => {
-      // Draw video frame to canvas
-      const context = canvas.getContext('2d');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = currentStream;
+    }
+
+    // Enumerate devices and switch camera
+    async function switchCamera() {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+
+      if (videoDevices.length > 1) {
+        currentDeviceId = videoDevices.find(device => device.deviceId !== currentDeviceId).deviceId;
+        startCamera(currentDeviceId);
+      }
+    }
+
+    // Capture image and add location, time, and place name
+    captureButton.addEventListener('click', () => {
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // Get Geolocation
-      navigator.geolocation.getCurrentPosition(async position => {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
+      const currentTime = new Date();
+      const formattedTime = currentTime.toLocaleString();
 
-        const timestamp = new Date();
-        const time = `${timestamp.getHours()}:${timestamp.getMinutes()}:${timestamp.getSeconds()} ${timestamp.getDate()}/${timestamp.getMonth() + 1}/${timestamp.getFullYear()}`;
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async position => {
+          const latitude = position.coords.latitude;
+          const longitude = position.coords.longitude;
+          
+          context.font = '20px Arial';
+          context.fillStyle = 'white';
+          context.fillText(`Lat: ${latitude}`, 10, canvas.height - 80);
+          context.fillText(`Long: ${longitude}`, 10, canvas.height - 60);
+          context.fillText(`Time: ${formattedTime}`, 10, canvas.height - 40);
 
-        // Fetch place name using OpenCage Geocoding API
-        const placeName = await getPlaceName(latitude, longitude);
+          const imageDataUrl = canvas.toDataURL('image/png');
+          saveImage(imageDataUrl, currentTime);
 
-        // Add geotag to the image (draw on canvas)
-        context.font = "20px Arial";
-        context.fillStyle = "white";
-        context.fillText(`Lat: ${latitude}`, 10, canvas.height - 80);
-        context.fillText(`Lon: ${longitude}`, 10, canvas.height - 60);
-        context.fillText(`Place: ${placeName}`, 10, canvas.height - 40);
-        context.fillText(`Time: ${time}`, 10, canvas.height - 20);
-
-        // Show the image on the page
-        const dataUrl = canvas.toDataURL('image/png');
-        photo.src = dataUrl;
-        downloadBtn.style.display = 'block';
-        downloadBtn.href = dataUrl;
-        downloadBtn.download = `geotagged_image_${timestamp.getTime()}.png`;
-      });
+          overlay.innerHTML = `Lat: ${latitude}, Long: ${longitude}<br>Time: ${formattedTime}`;
+        });
+      }
     });
 
-    // Reverse Geocoding function using OpenCage API
-    async function getPlaceName(lat, lon) {
-      const url = `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lon}&key=${API_KEY}`;
-      const response = await fetch(url);
-      const data = await response.json();
-      return data.results[0].formatted || "Unknown Location";
+    // Save the image automatically with a timestamped filename
+    function saveImage(imageDataUrl, currentTime) {
+      const timestamp = currentTime.toISOString().replace(/[:.]/g, '-').split('T');
+      const date = timestamp[0]; // YYYY-MM-DD
+      const time = timestamp[1].split('-')[0]; // HH-MM-SS
+      const filename = `photo-${date}_${time}.png`;
+      
+      const link = document.createElement('a');
+      link.href = imageDataUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
+
+    // Switch between front and back cameras
+    switchCameraButton.addEventListener('click', switchCamera);
+
+    // Toggle video recording (start/stop)
+    toggleRecordingButton.addEventListener('click', () => {
+      if (isRecording) {
+        mediaRecorder.stop();
+        toggleRecordingButton.innerText = 'Start Recording 🎥';
+        isRecording = false;
+      } else {
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(currentStream, { mimeType: 'video/webm' });
+
+        mediaRecorder.ondataavailable = event => {
+          if (event.data.size > 0) {
+            recordedChunks.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const videoURL = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = videoURL;
+          a.download = `video-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        };
+
+        mediaRecorder.start();
+        toggleRecordingButton.innerText = 'Stop Recording ⏹️';
+        isRecording = true;
+      }
+    });
+
+    // Start the camera on page load
+    startCamera();
   </script>
 </body>
 </html>
