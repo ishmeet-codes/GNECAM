@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GNECAM</title>
+  <title>Camera App with Aspect Ratio Selection</title>
   <style>
     body {
       margin: 0;
@@ -20,13 +20,13 @@
     video, canvas {
       display: block;
       width: 100%;
-      max-width: 640px;
+      max-width: 1280px; /* Higher max-width for higher resolution */
       height: auto;
       border-radius: 12px;
       margin-bottom: 10px;
     }
 
-    button {
+    button, select {
       background-color: #fff;
       border: none;
       color: black;
@@ -88,15 +88,32 @@
     #canvas {
       display: none;
     }
+
+    #aspect-ratio-selector {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background-color: #333;
+      color: white;
+      border-radius: 8px;
+      padding: 10px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <video id="video" autoplay></video>
-  <canvas id="canvas" width="640" height="480"></canvas>
+  <canvas id="canvas"></canvas>
   <div id="overlay"></div>
 
   <button id="capture">📸</button>
   <div id="switch-camera">🔄</div>
+  <select id="aspect-ratio-selector">
+    <option value="1:1">1:1</option>
+    <option value="4:3" selected>4:3</option>
+    <option value="16:9">16:9</option>
+    <option value="21:9">21:9</option>
+  </select>
 
   <script>
     let currentStream = null;
@@ -106,8 +123,21 @@
     const context = canvas.getContext('2d');
     const captureButton = document.getElementById('capture');
     const switchCameraButton = document.getElementById('switch-camera');
+    const aspectRatioSelector = document.getElementById('aspect-ratio-selector');
     const overlay = document.getElementById('overlay');
     const apiKey = 'cbd0371c8a014a2db556e49a900552cd'; // OpenCage API Key
+
+    let aspectRatio = '4:3'; // Default aspect ratio
+
+    // Update canvas size based on selected aspect ratio
+    function updateCanvasSize() {
+      const [widthRatio, heightRatio] = aspectRatio.split(':').map(Number);
+      const maxWidth = 1280;
+      const maxHeight = Math.round(maxWidth * (heightRatio / widthRatio));
+      
+      canvas.width = maxWidth;
+      canvas.height = maxHeight;
+    }
 
     // Get access to the user's camera
     async function startCamera(deviceId = null) {
@@ -139,7 +169,7 @@
 
     // Capture image and add location, time, and place name
     captureButton.addEventListener('click', () => {
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      context.drawImage(video, 0, 0, canvas.width, canvas.height); // Higher resolution canvas
 
       const currentTime = new Date();
       const formattedTime = currentTime.toLocaleString();
@@ -157,14 +187,14 @@
           context.fillRect(0, canvas.height - 120, canvas.width, 120);
 
           // Add text for location, place name, and timestamp
-          context.font = '20px Arial';
+          context.font = '30px Arial'; // Larger font for higher resolution
           context.fillStyle = 'white';
           context.fillText(`Lat: ${latitude}`, 10, canvas.height - 90);
-          context.fillText(`Long: ${longitude}`, 10, canvas.height - 70);
-          context.fillText(`Place: ${placeName}`, 10, canvas.height - 50);
-          context.fillText(`Time: ${formattedTime}`, 10, canvas.height - 30);
+          context.fillText(`Long: ${longitude}`, 10, canvas.height - 60);
+          context.fillText(`Place: ${placeName}`, 10, canvas.height - 30);
+          context.fillText(`Time: ${formattedTime}`, 10, canvas.height - 10);
 
-          const imageDataUrl = canvas.toDataURL('image/png');
+          const imageDataUrl = canvas.toDataURL('image/png', 1.0); // High-quality PNG (1.0 means full quality)
           saveImage(imageDataUrl, currentTime);
 
           overlay.innerHTML = `Lat: ${latitude}, Long: ${longitude}<br>Place: ${placeName}<br>Time: ${formattedTime}`;
@@ -207,7 +237,14 @@
     // Switch between front and back cameras
     switchCameraButton.addEventListener('click', switchCamera);
 
+    // Aspect ratio selection change
+    aspectRatioSelector.addEventListener('change', (event) => {
+      aspectRatio = event.target.value;
+      updateCanvasSize(); // Update canvas size based on selected aspect ratio
+    });
+
     // Start the camera on page load
+    updateCanvasSize(); // Initialize canvas size
     startCamera();
   </script>
 </body>
